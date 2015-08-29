@@ -1,0 +1,120 @@
+#!/usr/bin/python
+
+import urllib2
+import BeautifulSoup
+import networkx
+import time
+
+root_page = 'http://ec.europa.eu/commission/'
+
+def soupify(uri):
+	#helper to avoid repeating getting the page and loading it into parser
+	page = urllib2.urlopen(uri).read()
+	soup = BeautifulSoup.BeautifulSoup(page)
+	return soup
+
+def get_commissioners(root_page):
+	#returns the URIs for the current list of European Commissioners given the front page
+	soup = soupify(root_page)	
+	members = soup.findAll('div', 'class':'field-content member-details')
+	#locate commissioners' details on page
+	commissioners = []
+	for member in members:
+		if member.div['class': 'member-details-text'].span.string == 'In office':
+			#don't add any commissioners no longer in office
+			commissioners.append(member.a['href'])
+			#obtain their URI
+	return commissioners
+
+def get_commissioner(commish):
+	#returns details of a commissioner given their individual URI
+	soup = soupify(commish)
+	record = {}
+	record['role'] = (soup.find('span', 'class':'role')).string
+	#gets commissioner's rank eg President, 1st VP, VP, Commish
+	record['name'] = (soup.find('span', 'class':'first-name')).string + '' + (soup.find('span', 'class':'last-name')).string
+	record['job'] = (soup.find('span', 'class':'header-line-3')).string
+	#gets their department affiliation
+	uris_block = soup.find('div', 'class':'free-text')
+	record['commish_meetings_url'] = (uris_block.findAll('li'))[0].a['href']
+	#gets the URI for commissioners' meetings
+	record['staff_meetings_uri'] = (uris_block.findAll('li'))[1].a['href']
+	#ditto for their staff
+	soup = soupify('commish' + '/team_en')
+	staffers = {}
+	stf = soup.findAll('div', 'class':'field-content member-details')
+	for stfr in stf:
+		staffer = {}
+		staffername = (strf.find('span', 'class':'first-name')).string + '' + (soup.find('span', 'class':'last-name')).string
+		stafferjob =(strf.find('span', 'class':'label')).string
+		staffer[staffername] = stafferjob
+		staffers.append(staffer)
+	record['staffers'] = staffers
+	return record
+
+def get_meetings_by_name(commish, name, month=None, staffers=None,True):
+	#returns meetings for a commissioner or staff member given their URI
+	soup = soupify(commish)
+	meetings = []
+	ll = soup.find('span', 'class':'pagelinks')
+	#page through the meetings, generating the URI for each page
+	uribase = 'http://ec.europa.eu/' + ll.a['href']
+	for i in range(0,(len(ll)):
+		if i=0:
+			uri = uribase
+		else:
+			uri = uribase + i
+		#walk the pages
+		soup = soupify(uri)
+		table = soup.find('table', 'id':'listMeetingsTable')
+		#pull the table
+		for tr in table.tbody:
+			if staffers == True:
+			#meetings with staffers come as a package and include a name field
+				meeting = dict(zip('staffer', 'date', 'locale, 'lobby', 'subject'), ([td.string for td in tr]))
+			else:
+				meeting = dict(zip('date', 'locale, 'lobby', 'subject'), ([td.string for td in tr]))
+			if month not None:
+			#this filters meetings that occurred during a specified month
+					mo = (time.strptime(meeting['date'], '%d/%m/%Y'))).tm_mon
+					if mo ! = month:
+					continue 
+			else:
+				meeting['commissioner'] = name
+				meetings.append(meeting)
+		#parse the content into a row
+	return meetings
+
+def weighting(people=people, name, staffer=None):
+	if people[name][role] == 'President':
+			weighting = 1
+	if people[name][role] == 'High Representative' or commissioner[name][role] == 'First Vice-President':
+			weighting = 1 - 0.10
+	if people[name][role] == 'Vice-President':
+			weighting = 1 - 0.178
+	if people[name][role] == 'Commissioner':
+			weighting = 1 - 0.71 #weightings are derived from their population frequency as a % of the total commissioners
+	if staffer:
+		staffers = people[name][staffers]
+		role = staffers[staffer]
+		if role == 'Head of Cabinet':
+			weighting = weighting/3
+		else:
+			weighting = weighting/10		
+
+def make_nx_graph(title, graphs, meetings):
+	if title not in graphs:
+		nxg = networkx.MultiGraph(weighted=True)
+	else:
+		nxg = graphs[title]
+	for meeting in meetings:
+		if meeting[staffer]:
+			name = meeting[staffer]
+			weight = weighting(name, staffer=True)
+		else:
+			weight = weighting(name)
+		lobbies = [name] + [l.a.string for l in meeting['lobby']]
+		lobby_uris = [l.a['href'] for l in meeting['lobby']]
+		nxg.add_star(lobbies, date=meeting['date'], locale=meeting['locale'], subject=meeting['subject'], weight=weight)
+		
+				

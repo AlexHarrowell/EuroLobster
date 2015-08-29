@@ -1,0 +1,44 @@
+#!/usr/bin/python
+
+import urllib
+import xlrd
+
+#source_uri = '''http://ec.europa.eu/transparencyregister/public/consultation/statistics.do?action=getLobbyistsExcel&fileType=XLS_NEW'''
+
+#data = urllib.urlretrieve(source_uri)
+
+#xlrd doesn't like strings, only file names. so it's either use urllib2 and StringIO or urllib.urlretrieve
+
+book = xlrd.open_workbook('./full_export_new.xls')
+#remember urlretrieve returns an HTTPMessage
+
+sn = (book.sheet_names())[0]
+
+#get the sheet name
+
+sheet = book.sheet_by_name(sn)
+
+#open the sheet. cor, xlrd is picky.
+
+column_names = sheet.row_values(0)
+
+#this is how you get the headers. as I say, picky
+
+client_lobbyist_mapping = {}
+
+for row_number in range(sheet.nrows): #nrows returns count of rows
+	r = sheet.row_values(row_number) #address each row by its index number
+	row = dict(zip(column_names,r)) #make a dict with the column names
+	if row['Clients']:
+		if u'No clients' not in row['Clients']:
+			for client in (row['Clients']).split(','):
+					if client != 'S.A.': #French and Spanish people put commas in front of this
+						client_lobbyist_mapping[(client)] = row['(Organisation) name']
+for k, v in client_lobbyist_mapping.items():
+	print 'client: ', k, ' ', 'lobbyist: ', v
+
+#we should now have a mapping of clients to lobbyists in a Python dict.
+#this will break if the EComm changes the column names. doing it the other way by index would break if they changed the order of #columns, but then both are certain to happen at least once so pick your poison.
+
+	
+	
