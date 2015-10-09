@@ -174,9 +174,10 @@ class LobsterClient(object):
 		if metric == u'Link Centrality':
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			if nedges:
-				upshot = {k: v for k,v in u.items() if k in nedges}
+				upshot = {unicode(k[0] + ' ,' + k[1]): v for k,v in u.items() if k in nedges}
 			else:
 				upshot = u
+				print upshot
 
 		if metric == u'Predicted Links':
 			gr = self.make_unigraph_from_multigraph(g)
@@ -213,30 +214,32 @@ class LobsterClient(object):
 		output = {}
 		ks = []
 		for m in months_to_get:
-
 			new_graph.add_nodes_from(self.graphs[m].nodes_iter(data=True))
 			new_graph.add_weighted_edges_from(self.graphs[m].edges_iter(data=True))
 			output[m] = self.get_metric_from_graph(metric=self.user_input['stat'], nedges=names, keyword=self.user_input['keyword_search'], graph=new_graph, month=m)	
 			ks.extend(output[m].keys())
 		kset = set(ks)
-
+		outkeys = sorted(output.keys(), key=lambda s: time.strptime(s, '%B%Y'))
+		ok = outkeys[:]
+		ok.insert(0, 'name')
 		if self.user_input['output'] == u'csv':
 			if self.user_input['filename']:
 				with open(self.user_input['filename'], 'w') as f:
-					c = csv.DictWriter(f, fieldnames=output.keys())
+					c = csv.DictWriter(f, fieldnames=ok)
 					c.writeheader()
 					for k in ks:
-						row = {m: output[m].get(k, 0) for m in output}
+						row = {m: output[m].get(k, 0) for m in outkeys}
+						row['name'] = k.encode('utf-8')
 						c.writerow(row)
 			else:
 				s = StringIO.StringIO()
-				c = csv.DictWriter(s, fieldnames=output.keys())
+				c = csv.DictWriter(s, fieldnames=ok)
 				c.writeheader()
 				for k in ks:
-					row = {m: output[m].get(k, 0) for m in output}
+					row = {m: output[m].get(k, 0) for m in outkeys}
+					row['name'] = k.encode('utf-8')
 					c.writerow(row)
-				for line in s.getvalue():
-					print line
+				print s.getvalue()
 				s.close()
 				
 
@@ -245,15 +248,17 @@ class LobsterClient(object):
 				with open(self.user_input['filename'], 'w') as f:
 					outlist = []
 					for k in ks:
-						row = {m: m.get(k, 0) for m in output}
+						row = {m: output[m].get(k, 0) for m in outkeys}
+						row['name'] = k
 						outlist.append(row)
 					dump(outlist, f)
 			else:
 				outlist = []
 				for k in ks:
-					row = {m: m.get(k, 0) for m in output}
+					row = {m: output[m].get(k, 0) for m in outkeys}
+					row['name'] = k
 					outlist.append(row)
-				s = dumps(outlist, f)
+				s = dumps(outlist)
 				print s				
 
 lc = LobsterClient(user_input)
