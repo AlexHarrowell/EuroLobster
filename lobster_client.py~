@@ -34,7 +34,7 @@ argparser.add_argument('-n', '--name', type=lambda t: unicode(t, e), default=Non
 argparser.add_argument('-m', '--month', type=lambda t: unicode(t, e), default=None)
 argparser.add_argument('-k', '--keyword_search', type=lambda t: unicode(t, e), default=None)
 argparser.add_argument('-s', '--stat', type=lambda t: unicode(t, e), default=None) 
-argparser.add_argument('-o', '--output', type=lambda t: unicode(t, e), default=None)
+argparser.add_argument('-o', '--output', type=lambda t: unicode(t, e), default='csv')
 argparser.add_argument('-d', '--dir', type=lambda t: unicode(t, e), default='Graphs')
 argparser.add_argument('-f', '--filename', type=lambda t: unicode(t, e), default=None)
 
@@ -120,7 +120,7 @@ class LobsterClient(object):
 		nodes = self.cache[(u'nwc' + month)][month]
 		nwc = float(sum(nodes.values())/len(nodes.values()))
 		total_centrality = (graph.order()) * nwc
-		result = []
+		result = {}
 		if nedges == None:
 			nedges = graph.nodes()
 		for n in nedges:
@@ -190,7 +190,8 @@ class LobsterClient(object):
 					else:
 						upshot[(k[0], k[1])] = v
 		self.cacheflow(ck, data=upshot)
-		return sorted(upshot, key=itemgetter(1))
+		return upshot
+		#return sorted(upshot, key=itemgetter(1))
 			
                 
 	def LobsterClient(self):
@@ -216,9 +217,8 @@ class LobsterClient(object):
 			new_graph.add_nodes_from(self.graphs[m].nodes_iter(data=True))
 			new_graph.add_weighted_edges_from(self.graphs[m].edges_iter(data=True))
 			output[m] = self.get_metric_from_graph(metric=self.user_input['stat'], nedges=names, keyword=self.user_input['keyword_search'], graph=new_graph, month=m)	
-			ks.append(output[m].keys())
-		
-		ks = sorted(list(set(ks)))
+			ks.extend(output[m].keys())
+		kset = set(ks)
 
 		if self.user_input['output'] == u'csv':
 			if self.user_input['filename']:
@@ -226,17 +226,19 @@ class LobsterClient(object):
 					c = csv.DictWriter(f, fieldnames=output.keys())
 					c.writeheader()
 					for k in ks:
-						row = {m: m.get(k, 0) for m in output}
+						row = {m: output[m].get(k, 0) for m in output}
 						c.writerow(row)
 			else:
-				with StringIO.StringIO() as s
-					c = csv.DictWriter(s, fieldnames=output.keys())
-					c.writeheader()
-					for k in ks:
-						row = {m: m.get(k, 0) for m in output}
-						c.writerow(row)
-					for line in s:
-						print line
+				s = StringIO.StringIO()
+				c = csv.DictWriter(s, fieldnames=output.keys())
+				c.writeheader()
+				for k in ks:
+					row = {m: output[m].get(k, 0) for m in output}
+					c.writerow(row)
+				for line in s.getvalue():
+					print line
+				s.close()
+				
 
 		elif self.user_input['output'] == u'json':
 			if self.user_input['filename']:
