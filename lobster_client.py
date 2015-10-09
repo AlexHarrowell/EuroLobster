@@ -124,12 +124,14 @@ class LobsterClient(object):
 		if nedges == None:
 			nedges = graph.nodes()
 		for n in nedges:
-			neigh = [n for n in graph.neighbors(n) if len(graph.neighbors(n)) > 0]
-			neigh_central = sum([v for k,v in nodes.iteritems() if k in neigh])  
-			order = graph.order() - (1 + len(neigh))
-			mc = nodes[n] + neigh_central
-			gf = nwc - ((total_centrality - mc)/order)
-			result[n] = gf
+			if n in graph.nodes():
+				neigh_central = sum([v for k,v in nodes.iteritems() if k in graph.neighbors(n)])  
+				order = graph.order() - (1 + len(graph.neighbors(n)))
+				mc = nodes[n] + neigh_central
+				gf = nwc - ((total_centrality - mc)/order)
+				result[n] = gf
+			else:
+				result[n] = 0
 		return result
 
 
@@ -173,22 +175,25 @@ class LobsterClient(object):
 
 		if metric == u'Link Centrality':
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
-			if nedges:
-				upshot = {unicode(k[0] + ' ,' + k[1]): v for k,v in u.items() if k in nedges}
-			else:
-				upshot = u
+			upshot = {}
+			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below. 
+				if nedges:
+					if k[0] in nedges or k[1] in nedges:
+						upshot[unicode(k[0] + ' - ' + k[1])] = v
+				else:
+					upshot[unicode(k[0] + ' - ' + k[1])] = v
 
 		if metric == u'Predicted Links':
 			gr = self.make_unigraph_from_multigraph(g)
 			u = link_prediction.resource_allocation_index(gr)
 			upshot = {} #[]
-			for k, v in u.items():
-				if v > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values. 
+			for k, v, p in u:
+				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values. 
 					if nedges:
-						if k[0] in nedges or k[1] in nedges:
-							upshot[(k[0], k[1])] = v
+						if k in nedges or v in nedges:
+							upshot[unicode(k + ' - ' + v)] = p
 					else:
-						upshot[(k[0], k[1])] = v
+						upshot[unicode(k + ' - ' + v)] = p
 		self.cacheflow(ck, data=upshot)
 		return upshot
 		#return sorted(upshot, key=itemgetter(1))
