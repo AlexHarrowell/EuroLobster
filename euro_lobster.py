@@ -1,4 +1,5 @@
 #!/usr/bin/python
+# -*- coding: utf-8 -*-
 
 import urllib2
 import urllib #there's a reason for this
@@ -6,6 +7,7 @@ import csvkit
 import xlrd
 from bs4 import BeautifulSoup
 import networkx
+from networkx.readwrite import json_graph
 import re
 import os
 import json
@@ -23,7 +25,8 @@ def get_weighting_data(source):
 	reader = csvkit.py2.CSVKitDictReader(survey)
 	for row in reader:
 		if row[u'Timestamp'] == u'% of a Juncker unit':
-			return row #get survey material as a lookup table
+			return row 
+			#get survey material as a lookup table
 
 def soupify(uri):
 	#helper to avoid repeating getting the page and loading it into parser
@@ -36,22 +39,20 @@ def get_graphs():
 	fs = (os.walk('Graphs').next())[2]
 	for f in fs:
 		if '.json' in f:
-			with open(f) as fo:
+			with open(('./Graphs/' + f)) as fo:
 				try:
-					g = networkx.readwrite.json_graph.adjacency_graph(json.read(fo), multigraph=True)
+					g = json_graph.adjacency_graph(json.load(fo), multigraph=True)
 					graphs[(f)] = g
 				except IOError:
 					print 'not a Lobster graph: ', f
-				fo.close()
 	return graphs
 
 def save_graphs(graphs):
 	for g,d in graphs.items():
-		with g as f:
-			open(f, 'w')
-			data = networkx.readwrite.json_graph.adjacency_data(d)
-			s = json.dump(f, data)
-			f.close()
+		f = open(g, 'w')
+		data = json_graph.adjacency_data(d)
+		s = json.dump(data, f)
+		f.close()
 				
 				
 
@@ -66,7 +67,6 @@ def get_lobbyists_clients(source_uri):
 	sheet = book.sheet_by_name(sn)
 	#open the sheet. cor, xlrd is picky.
 	column_names = sheet.row_values(0)
-	#this is how you get the headers. as I say, picky
 	client_lobbyist_mapping = {}
 	for row_number in range(sheet.nrows): #nrows returns count of rows
 		r = sheet.row_values(row_number) #address each row by its index number
@@ -160,59 +160,93 @@ def get_commissioner_detail(commish, weightings):
 	record['staff_meetings_uri'] = uris_fns[1]['href']
 	#ditto for their staff
 	#new_uri = commish.rstrip('_en') + '/team_en'
-	if record['name'] == u'Andrus Ansip': #this is necessary because some sloppy herbert did the obvious
-		link_name = u'team of ' + ' '+ (record['name'])
-	elif 'Oettinger' in record['name']: #Oettinger wanted his initial but sysadmin didn't bother elsewhere
-		link_name = u'team of ' + (record['name']).replace('H. ', '') #doing it this way to avoid PEP 263 whining.
-	else:
-		link_name = u'team of ' + (record['name'])
-	print link_name
-	new_uri = soup.find('a', title=link_name)['href']
+	#if record['name'] == u'Andrus Ansip': #this is necessary because some sloppy herbert did the obvious
+		#link_name = u'team of ' + ' '+ (record['name'])
+	#elif 'Oettinger' in record['name']: #Oettinger wanted his initial but sysadmin didn't bother elsewhere
+		#link_name = u'team of ' + (record['name']).replace('H. ', '') #doing it this way to avoid PEP 263 whining.
+	#else:
+		#link_name = u'team of ' + (record['name'])
+	#print link_name
+	new_uri = soup.find('a', text='team page')['href']
 	soup = soupify(new_uri)
 	record['staffers'] = {}
 	stf = soup.find_all('div', {'class':'member-details-text'}) #was field-content member-details
+	if record['name'] == u'Jean-Claude Juncker':
+		record['staffers'][u'José Eduardo Leandro'] = u'Senior Advisor' # this bloke works as principal economic adviser either for the Council Presidency or for DG FIN depending on source. he isn't included in Juncker's team. but he is having meetings as part of it.
+	if record['name'] == u'Karmenu Vella':
+		record['staffers'][u'Patrick Costello'] = u'Chef du Cabinet' # he quit in august 2015 and was replaced
+	if record['name'] == u'Pierre Moscovici':
+		record['staffers'][u'Malgorzata Iskra'] = u'Assistant' #she seems to have disappeared. worrying.
+	if record['name'] == u'Carlos Moedas':
+		record['staffers'][u'Eveline Lecoq'] = u'Member' #another disappearance.
+	if record['name'] == u'Christos Stylianides':
+		record['staffers'][u'Caterine Ebah Moussa'] = u'Member of Cabinet' #Ebah Moussa deputises for Davinia Wood during maternity leave
+	#this is how you get the headers. as I say, picky
+	if record['name'] == u'Violeta Bulc':
+		record['staffers'][u'Marjeta Jager'] = u'Head of Cabinet' #replaced
+	if record['name'] == u'Kristalina Georgieva':
+		record['staffers'][u'Mariana Hristcheva'] = u'Head of Cabinet' #replaced
+	if record['name'] == u'Dimitris Avramopoulos':
+		record['staffers'][u'Kostas Sasmatzoglou'] = u'Communication Adviser' #replaced
+	if u'Corina' in record['name']:
+		record['staffers'][u'Dragos Bucurenci'] = u'Communication Adviser' #replaced
+	if record['name'] == u'Carlos Moedas':
+		record['staffers'][u'Vygandas Jankunas'] = u'Member of Cabinet' #rotated back to the DG Research in March '15
 	for stfr in stf:
 		staffer = {}
-		if stfr.span.string != None: #Canetes fix. checks for presence of content
+		if stfr.span.string != None: #checks for presence of content
 			try:
-				stafferjob = (stfr.find('span', {'class':'label'})).string.strip()
-				staffername = (stfr.find('span', {'class':'first-name'})).string.strip() + '' + (stfr.find('span', {'class':'last-name'})).string.strip()
+				stafferjob = ((stfr.find('span', {'class':'label'})).string.strip())
+				stafferfirstname = ((stfr.find('span', {'class':'first-name'})).string.strip()).replace('-', ' ')
+				stafferlastname = ((stfr.find('span', {'class':'last-name'})).string.strip()).replace('-', ' ')
+				staffername = stafferfirstname + ' ' + stafferlastname  #some staffers are inconsistent about hyphens so we're going to remove all hyphens and compare the hyphenless versions.
 				if stafferjob in weightings: #this check is here to deal with any weird job titles we didn't spot, also archivists and drivers, who some commissioners list.
 					record['staffers'][(staffername)] = stafferjob #basically the same stuff for the staffers
-			except AttributeError:
-				pass
+			except AttributeError: #Canetes fix. contains empty items
+				print 'empty item: ', stfr				
+				pass	
 	return record
 
-	
-def meeting_parser(uri, details, lobbyists, graphs, staffers=None):
-		print uri, staffers
+def special_cases(ms):
+	cases = {u'Leon Delvaux': u'Léon Delvaux', u'Sara Nelen': u'Sarah Nelen', u'Bernardus Smulders': u'Ben Smulders', u'Iwona Piorko Bermig': u'Iwona Piorko', u'Laure Chapuis-Kombos': u'Laure Chapuis', u'Stig Joergen Gren': u'Jörgen Gren', u'Dagmara Koska': u'Dagmara Maria Koska', u'Tuure Taneli Lahti': u'Taneli Lahti', u'Valérie Herzberg': u'Valerie Herzberg', u'David Mueller': u'David Müller', u'Christian Burgsmueller': u'Christian Burgsmüller', u'Maria Asenius': u'Maria Åsenius', u'Miguel Ceballos Baron': u'Miguel Ceballos Barón', u'Denis Cajo': u'Denis Čajo', u'Maria Cristina Lobillo Borrero': u'Cristina Lobillo Borrero', u'Isaac Valero Ladron': u'Isaac Valero Ladrón', u'Andras Inotai': u'András G. Inotai', u'Juergen Mueller': u'Jürgen Müller', u'Arunas Vinciunas': u'Arūnas Vinčiūnas', u'Arunas Ribokas': u'Arūnas Ribokas', u'Konstantinos Sasmatzoglou': u'Kostas Sasmatzoglou', u'Julie Fionda': u'Julie Anne Fionda', u"Simon O'Connor": u'Simon O\u2019Connor', u'Kim-Tobias Eling': u'Kim Eling', u'Nathalie De Basaldua Lemarchand': u'Nathalie de Basaldúa', u'Matej Zakonjsek': u'Matej Zakonjšek', u'Desiree Oen': u'Désirée Oen', u'Friedrich-Nikolaus Von Peter': u'Nikolaus von Peter', u'Natasa Vidovic': u'Nataša Vidovič', u'Rolf Carsten Bermig': u'Carsten Bermig', u'Kaius Kristian Hedberg': u'Kristian Hedberg', u'Monika Ladmanova': u'Monika Ladmanová', u'Jonathan Michael Hill': u'Jonathan Hill', u'Jan Mikolaj Dzieciolowski': u'Jan Mikołaj Dzięciołowski', u'Soren Schonberg': u'Søren Schønberg', u'Mette Dyrskjot': u'Mette Dyrskjøt', u'Ditte Juul-Jorgensen': u'Ditte Juul-Jørgensen', u'Ditte Juul Jorgensen': u'Ditte Juul Jørgensen', u'Antonio Lowndes Marques De Araujo Vicente': u'António Vicente', u'Maria Da Graca Carvalho': u'Maria da Graça Carvalho', u'Alfredo Sousa de Jesus': u'Alfredo Sousa', u'Alfredo Sousa De Jesus': u'Alfredo Sousa', u'Tomas Nejdl': u'Tomáš Nejdl', u'Gabriel - Calin Onaca': u'Gabriel Onaca', u'Mikel Landabaso Alvarez': u'Mikel Landabaso', u'Linsey Mccallum': u'Linsey McCallum'}
+	for s, c in cases.items():
+		if s in ms:
+			ms.remove(s)
+			ms.append(c)	
+	return ms
+#you made me do this. You bastards. all of these are staffers who sometimes use a different version of their names in the meetings register to the one they use in the team lists.	anyway, decided to pull these out and centralise the special cases in a special cases function.
+
+def meeting_parser(uri, details, lobbyists, graphs, staffers):
 		soup = soupify(uri)
 		#gets meetings for a commissioner or staff member given output from get_commissioner_detail, parses them, and adds them to the networkx graph
-		def inner_parser(uri, details, lobbyists, graphs, staffers=None):
+		def inner_parser(uri, details, lobbyists, graphs, staffers):
 			soup = soupify(uri)
 			crufto = re.compile('[\t\r\n]|(  )') #strips cruft
 			table = soup.find('table', id='listMeetingsTable')
 			#pull the table
 			for tr in table.tbody.find_all('tr'):
-					if tr.td.string:
+					#if tr.td.string:
 						strings = [list(td.stripped_strings) for td in tr.find_all('td')] 
                                                 meeting = {}
+						meeting['dg'] = details['job']
 						if staffers == None:
                                                         meeting['date'] = (strings[0])[0]               
                                                         meeting['locale'] = (strings[1])[0]
                                                         meeting['subject'] = (strings[3])[0]
 							meeting['lobby'] = [re.sub(crufto, '', s) for s in strings[2]]
 							meeting['job'] = details['role']
-							meeting['dg'] = details['job']
-							meeting['weight'] = float((get_weighting(meeting['dg'], meeting['job'], weightings))/len(meeting['lobby'])) #because we add a separate path for each lobbyist, got to do this. also reflects that a one-to-one is the ultimate platonic ideal of lobbying.	
+							meeting['weight'] = float((get_weighting(meeting['dg'], meeting['job'], weightings))/len(meeting['lobby']))
+
+#because we add a separate path for each lobbyist, got to do this. also reflects that a one-to-one is the ultimate platonic ideal of lobbying.
+#meetings with staffers come as a package and include a name field. which can include multiple staffers.	
 						else:
-						#meetings with staffers come as a package and include a name field. which can include multiple staffers.
-                                                    	meeting['staffer'] = [(s.replace('  ', '')) for s in strings[0]]
+                                                    	ms = [(s.replace('  ', ' ')) for s in strings[0]]
+							meeting['staffer'] = special_cases(ms)
                                                         meeting['date'] = (strings[1])[0]              
                                                         meeting['locale'] = (strings[2])[0]
                                                         meeting['lobby'] = [re.sub(crufto, '', s) for s in strings[3]]
                                                         meeting['subject'] = (strings[4])[0]
-							meeting['job'] = [details['staffers'][(meeting[(staffer)])] for staffer in meeting['staffer']] 
+							meeting['job'] = [details['staffers'][(staffer.replace('-', ' '))] for staffer in meeting['staffer']]
 							staffer_weights = [float(get_weighting(meeting['dg'], job, weightings)) for job in meeting['job']]	
 							meeting['weight'] = float(sum(staffer_weights)/len(staffer_weights))
 						if meeting['date'] != 'Cancelled': #this is a thing although check for tr.td.string should get it
@@ -234,16 +268,14 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers=None):
 					uri = uribase
 				else:
 					uri = uribase + str(i)
-					
-					print uri
 				try:
-					inner_parser(uri, details, lobbyists, graphs, staffers=None)
+					inner_parser(uri, details, lobbyists, graphs, staffers)
 				except urllib2.HTTPError:
 					print 'HTTP Error: ', uri
 					return None
 		else: #deal with single page case like Mogherini
 			try:
-				inner_parser(uri, details, lobbyists, graphs, staffers=None)
+				inner_parser(uri, details, lobbyists, graphs, staffers)
 			except urllib2.HTTPError:
 					print 'HTTP Error: ', uri
 					return None
@@ -257,22 +289,25 @@ weightings = get_weighting_data(weighting_source)
 lobbyclients = get_lobbyists_clients(lobbysource)
 graphs = get_graphs()
 commissioners = get_commissioners(root_page)
-
+commishes = []
+staff = []
 for commissioner in commissioners:
 	details = get_commissioner_detail(commissioner, weightings)
-	staff.append((details['staffers']).keys())
-	meeting_parser(details['commish_meetings_uri'], details, lobbyclients, graphs)
-	meeting_parser(details['staff_meetings_uri'], details, lobbyclients, graphs, staffers=True)
+	for k in (details['staffers']).keys():
+		staff.append(k)
+	commishes.append(details['name'])
+	meeting_parser(details['commish_meetings_uri'], details, lobbyclients, graphs, None)
+	meeting_parser(details['staff_meetings_uri'], details, lobbyclients, graphs, True)
 	
 for graph in graphs.values():
 	for n in graph.nodes(data=True):
 		if 'type' not in n[1]:
-			if n in staff:
+			if n[0] in staff:
 				n[1]['type'] = 'staffer'
-			elif n in lobbyclients.values():
+			elif n[0] in lobbyclients.values():
 				n[1]['type'] = 'lobbyist'
-			elif n in lobbyclients:
-				n[1]['type'] = 'lobby'
+			elif n[0] in commishes:
+				n[1]['type'] = 'commissioner'	
 			else:
-				n[1]['type'] = 'commissioner'
+				n[1]['type'] = 'lobby'
 save_graphs(graphs)
