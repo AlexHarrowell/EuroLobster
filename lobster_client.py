@@ -134,7 +134,26 @@ class LobsterClient(object):
 				result[n] = 0
 		return result
 
+	def degree(self, graph, nedges):
+		g = graph
+		if nedges == None:
+			nedges = g.nodes_iter()
+		result = {n: sum([e[2]['weight']['weight'] for e in g.edges_iter(n, data=True)]) for n in nedges}
+		return result
 
+	def gatekeeper(self, graph, nedges):
+		g = graph
+		d = self.degree(graph, None)
+		av_degree = sum(d.values())/len(d.values())
+		result = {}
+		if nedges == None:
+			nedges = g.nodes_iter()
+		for node in nedges:
+			tld = self.degree(g, [n for n in g.nodes_iter() if n in graph.neighbors(node)])
+			gk = sum(tld.values())/len(tld.values())
+			result[node] = gk/av_degree
+		return result
+		
 	def get_metric_from_graph(self, metric=None, nedges=None, keyword=None, graph=None, month=None):
 
 	#'''this func will do most of the work. lets you get a named metric for nodes, optionally restricting this by month, by specified nodes, or by entity type ie lobby/staffer/lobbyist/commissioner. first constructs a cache key and then looks in the cache
@@ -149,13 +168,12 @@ class LobsterClient(object):
 		#'''if a keyword search is specified, we list the nodes where that keyword is found in one of its attributes'''
 		
 		if metric == u'Degree':		
-			#gr = self.make_unigraph_from_multigraph(mg=g)			
-			upshot = g.degree(nbunch=nedges)
+			upshot = self.degree(g, nedges)
+		
+		if metric == u'Gatekeepership':
+			upshot = self.gatekeeper(g, nedges)
 
 		if metric == u'Closeness Centrality':
-			#g = self.make_unigraph_from_multigraph(mg=g)
-			#for e in g.edges_iter(data=True):
-				#print e
 			u = centrality.closeness_centrality(g, normalized=True)
 			if nedges:
 				upshot = {k: v for k,v in u.items() if k in nedges}
