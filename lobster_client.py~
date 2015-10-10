@@ -96,28 +96,8 @@ class LobsterClient(object):
 			else:
 					return None
 
-	def network_wide_centrality(self, months):
-
-	#'''computes the network-wide centrality, ie. average of betweenness centrality for all nodes in each monthly network. this is needed for GREEDY_FRAGILE, and is a pain to compute. so we do it at startup, cache it, and keep it on disk.'''
-		result = {}
-		for m in months:
-			ck = u'nwc' + m
-			if ck in self.cache:
-				return self.cache[ck]
-			else:
-				result[m] = centrality.betweenness_centrality(self.graphs[m], weight='weight')
-				self.cacheflow(cache_key=ck, data=result)
-	
-	def make_unigraph_from_multigraph(self, mg=None): #you won't believe how cagy nx devs are about the fact a lot of their stuff doesn't work with multigraphs. anyway, this is some of their code.
-		gg=nx.Graph()
-		for n,nbrs in mg.adjacency_iter():
-    			for nbr,edict in nbrs.items():
-        			minvalue=min([d['weight'] for d in edict.values()])
-        			gg.add_edge(n,nbr, weight = minvalue)
-		return gg
-
-	def greedy_fragile(self, graph, nedges, month):
-		nodes = self.cache[(u'nwc' + month)][month]
+	def greedy_fragile(self, graph, nedges):
+		nodes = centrality.betweenness_centrality(graph, weight='weight')
 		nwc = float(sum(nodes.values())/len(nodes.values()))
 		total_centrality = (graph.order()) * nwc
 		result = {}
@@ -142,6 +122,7 @@ class LobsterClient(object):
 		return result
 
 	def gatekeeper(self, graph, nedges):
+		g = graph
 		d = self.degree(graph, None)
 		av_degree = sum(d.values())/len(d.values())
 		result = {}
@@ -183,12 +164,11 @@ class LobsterClient(object):
                         u = centrality.betweenness_centrality(g, weight='weight', normalized=True)	
 			if nedges:
 				upshot = {k: v for k,v in u.items() if k in nedges}
-					#[k for k in u if k[0] in nedges]
 			else:
 				upshot = u
 
 		if metric == u'Greedy_Fragile':
-			upshot = self.greedy_fragile(g, nedges, month)
+			upshot = self.greedy_fragile(g, nedges)
 
 		if metric == u'Link Centrality':
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
@@ -213,8 +193,6 @@ class LobsterClient(object):
 						upshot[unicode(k + ' - ' + v)] = p
 		self.cacheflow(ck, data=upshot)
 		return upshot
-		#return sorted(upshot, key=itemgetter(1))
-			
                 
 	def LobsterClient(self):
 		self.cache = self.get_cache(self.user_input['dir'])
@@ -230,7 +208,6 @@ class LobsterClient(object):
 		else:
 			months_to_get = sorted(self.graphs.keys(), key=lambda s: time.strptime(s, '%B%Y'))
 
-		self.nwc = self.network_wide_centrality(months_to_get)
 		new_graph = nx.MultiGraph(weighted=True)
 		output = {}
 		ks = []
@@ -248,7 +225,7 @@ class LobsterClient(object):
 				with open(self.user_input['filename'], 'w') as f:
 					c = csv.DictWriter(f, fieldnames=ok)
 					c.writeheader()
-					for k in ks:
+					for k in kset:
 						row = {m: output[m].get(k, 0) for m in outkeys}
 						row['name'] = k.encode('utf-8')
 						c.writerow(row)
@@ -256,7 +233,7 @@ class LobsterClient(object):
 				s = StringIO.StringIO()
 				c = csv.DictWriter(s, fieldnames=ok)
 				c.writeheader()
-				for k in ks:
+				for k in kset:
 					row = {m: output[m].get(k, 0) for m in outkeys}
 					row['name'] = k.encode('utf-8')
 					c.writerow(row)
@@ -268,14 +245,14 @@ class LobsterClient(object):
 			if self.user_input['filename']:
 				with open(self.user_input['filename'], 'w') as f:
 					outlist = []
-					for k in ks:
+					for k in kset:
 						row = {m: output[m].get(k, 0) for m in outkeys}
 						row['name'] = k
 						outlist.append(row)
 					dump(outlist, f)
 			else:
 				outlist = []
-				for k in ks:
+				for k in kset:
 					row = {m: output[m].get(k, 0) for m in outkeys}
 					row['name'] = k
 					outlist.append(row)
