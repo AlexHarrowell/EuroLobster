@@ -182,30 +182,30 @@ class LobsterClient(object):
 		if metric == u'Link Centrality':
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			upshot = {}
-			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below. 
-				a = g.node[k[0]]
-				b = g.node[k[1]]
+			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below.
+				a = g.node[k[0]]['name']
+				b = g.node[k[1]]['name'] 
 				if nedges:
 					filter_list = [n[0] for n in nedges]
-					if k in filter_list or v in filter_list:
-						upshot[unicode(a['name'] + ' - ' + b['name'])] = v
+					if k[0] in filter_list or k[1] in filter_list:
+						upshot[unicode(a + ' - ' + b)] = v
 				else:
-					upshot[unicode(a['name'] + ' - ' + b['name'])] = v
+					upshot[unicode(a + ' - ' + b)] = v
 
 		if metric == u'Predicted Links':
-			gr = self.make_unigraph_from_multigraph(g)
+			gr = self.make_unigraph_from_multigraph(mg=g)
 			u = link_prediction.resource_allocation_index(gr)
 			upshot = {}
 			for k, v, p in u:
 				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values.
-					a = gr.node[k]
-					b = gr.node[v]
+					a = g.node[k]['name']
+					b = g.node[v]['name']
 					if nedges:
 						filter_list = [n[0] for n in nedges]
 						if k in filter_list or v in filter_list:
-							upshot[unicode(a['name'] + ' - ' + b['name'])] = p
+							upshot[unicode(a + ' - ' + b)] = p
 					else:
-						upshot[unicode(a['name'] + ' - ' + b['name'])] = p
+						upshot[unicode(a + ' - ' + b)] = p
 		self.cacheflow(ck, data=upshot)
 		return upshot
                 
