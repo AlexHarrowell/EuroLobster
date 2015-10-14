@@ -186,7 +186,8 @@ class LobsterClient(object):
 				a = g.node[k[0]]
 				b = g.node[k[1]]
 				if nedges:
-					if a in nedges or b in nedges:
+					filter_list = [n[0] for n in nedges]
+					if k in filter_list or v in filter_list:
 						upshot[unicode(a['name'] + ' - ' + b['name'])] = v
 				else:
 					upshot[unicode(a['name'] + ' - ' + b['name'])] = v
@@ -198,9 +199,10 @@ class LobsterClient(object):
 			for k, v, p in u:
 				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values.
 					a = gr.node[k]
-					b = gr.node[v] 
+					b = gr.node[v]
 					if nedges:
-						if a in nedges or b in nedges:
+						filter_list = [n[0] for n in nedges]
+						if k in filter_list or v in filter_list:
 							upshot[unicode(a['name'] + ' - ' + b['name'])] = p
 					else:
 						upshot[unicode(a['name'] + ' - ' + b['name'])] = p
