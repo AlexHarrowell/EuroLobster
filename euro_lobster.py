@@ -13,6 +13,7 @@ import os
 import json
 import time
 import StringIO
+import hashlib
 
 root_page = 'http://ec.europa.eu/commission/'
 weighting_source = '''https://docs.google.com/spreadsheets/d/1nCDV4LTyKUfoviiUz4U1sOlDulO6wH40G9fR9J2NinA/pub?gid=1008557036&single=true&output=csv''' #contains output from a survey of who is important
@@ -97,30 +98,72 @@ def get_weighting(dept, job, weightings):
 
 def add_to_graph(meeting, graphs, graph_id, lobbyists):
 #this is a bit complicated. unlike the Lobster PoC, we have staffers and lobbyists as intermediaries between the Powerful Ones. therefore it's not just a list of (lobby,minister) tuples. as a result, we have to use the add_path method.       	
-	def add_path_wrapper(path, meeting, graphs, graph_id):
+	def add_path_wrapper(path, meeting, graphs, graph_id, readable_paths, staffers_to_flag, lobbyists_to_flag):
+		#the new args staffers_to_flag and lobbyists_to_flag pass lists of nodes in each category to be marked as such
 		if graph_id in graphs:
 			graph = graphs[(graph_id)]
 		else:
 			graph = networkx.MultiGraph(weighted=True)
 			graphs[(graph_id)] = graph
-		graph.add_path(path, date=meeting['date'], locale=meeting['locale'], subject=meeting['subject'], weight=meeting['weight'])	#wrapper to avoid repeating myself		
+		graph.add_path(path, date=meeting['date'], locale=meeting['locale'], subject=meeting['subject'], weight=meeting['weight'])	#wrapper to avoid repeating myself	
+		graph[path[0]]['type'] == 'commissioner' #the path starts with the commissioner
+		graph[path[:1]]['type'] == 'lobby' #and ends with the lobby
+		for n in path:
+			graph[n]['name'] = readable_paths[n] #now that nodes are identified by a unique hash, we need to add a human readable name in a node attribute
+			if n in lobbyists_to_flag:
+				graph[n]['type'] = 'lobbyist' #mark the lobbyists
+			if n in staffers_to_flag:
+				graph[n]['type'] = 'staffer' #and the staffers
+	def hasher(name, dg, job, flavour):
+		return hashlib.md5(name, dg, job, flavour).hexdigest()	
+
 	paths = []
-	lobbies = [meeting['commissioner']] #the path begins with the commissioner
+	readable_paths = {}
+	lobbyists_to_flag = []
+	staffers_to_flag = []
+	#the path begins with the commissioner
+	
 	for lobby in meeting['lobby']: # one path per commissioner-lobby pairing
 		if lobby in lobbyists: # if there are lobbyists, one lobbyist-client pairing
 			if 'staffer' in meeting:
 				for s in meeting['staffer']: #one path per commissioner-staffer-lobby combination
-					paths.append([meeting['commissioner'], s, lobbyists[(lobby)], lobby])
+					#we're creating a unique hash on name, DG, job title/lobbying client, and flavour i.e commissioner, staffer, lobbyist, lobby
+					c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], 'commissioner') 
+					#this means we need to keep a lookup table of hashes and meaningful names
+					readable_paths[c] = meeting['commissioner']
+					st = hasher(s, meeting['dg'], meeting['job'], 'staffer')
+					readable_paths[st] = s
+					#and track which nodes, as identified by their hash, are staffers
+					staffers_to_flag.append(st)
+					b = hasher(lobbyists[(lobby), None, lobby, 'lobbyist')
+					readable_paths[b] = lobbyists[(lobby)]
+					#or lobbyists
+					lobbyists_to_flag.append(b)
+					paths.append(c, st, b, lobby)
+					
 			else:
-				paths.append([meeting['commissioner'], lobbyists[(lobby)], lobby]) #deal with case where lobbyists present but no staffers
+				c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], 'commissioner')
+				b = hasher(lobbyists[(lobby)], None, lobby, 'lobbyist')
+				lobbyists_to_flag.append(b)
+				paths.append(c, b, lobby) #deal with case where lobbyists present but no staffers
+				readable_paths[c] = meeting['commissioner']
+				readable_paths[b] = lobbyists['lobby']
 		else:
 			if 'staffer' in meeting:
 				for s in meeting['staffer']:
-					paths.append([meeting['commissioner'], s, lobby]) #case with staffer and no lobbyist
+					c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], 'commissioner')
+					st = hasher(s, meeting['dg'], meeting['job'], 'staffer')
+					staffers_to_flag.append(st)
+					paths.append(c, st, lobby]) #case with staffer and no lobbyist
+					readable_paths[c] = meeting['commissioner']
+					readable_paths[st] = s
 			else:
-				paths.append([meeting['commissioner'], lobby]) #case with lobby, but neither staffers nor lobbyists
+				c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], 'commissioner')
+				paths.append(hasher(meeting['commissioner'], meeting['dg'], meeting['job'], 'commissioner'), lobby])
+				readable_paths[c] = meeting['commissioner]
+ #case with lobby, but neither staffers nor lobbyists
 	for path in paths:
-		add_path_wrapper(path, meeting, graphs, graph_id)
+		add_path_wrapper(path, meeting, graphs, graph_id, readable_paths, staffers_to_flag, lobbyists_to_flag)
 
 
 def get_commissioners(root_page):
@@ -289,25 +332,11 @@ weightings = get_weighting_data(weighting_source)
 lobbyclients = get_lobbyists_clients(lobbysource)
 graphs = get_graphs()
 commissioners = get_commissioners(root_page)
-commishes = []
 staff = []
 for commissioner in commissioners:
 	details = get_commissioner_detail(commissioner, weightings)
 	for k in (details['staffers']).keys():
 		staff.append(k)
-	commishes.append(details['name'])
 	meeting_parser(details['commish_meetings_uri'], details, lobbyclients, graphs, None)
 	meeting_parser(details['staff_meetings_uri'], details, lobbyclients, graphs, True)
-	
-for graph in graphs.values():
-	for n in graph.nodes(data=True):
-		if 'type' not in n[1]:
-			if n[0] in staff:
-				n[1]['type'] = 'staffer'
-			elif n[0] in lobbyclients.values():
-				n[1]['type'] = 'lobbyist'
-			elif n[0] in commishes:
-				n[1]['type'] = 'commissioner'	
-			else:
-				n[1]['type'] = 'lobby'
 save_graphs(graphs)
