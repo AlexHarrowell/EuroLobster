@@ -183,12 +183,13 @@ class LobsterClient(object):
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			upshot = {}
 			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below.
-				a = g.node[k[0]]['name']
-				b = g.node[k[1]]['name'] 
+				a, b = k
+				c = g.node[a]['name']
+				d = g.node[b]['name'] 
 				if nedges:
 					filter_list = [n[0] for n in nedges]
-					if k[0] in filter_list or k[1] in filter_list:
-						upshot[unicode(a + ' - ' + b)] = v
+					if a in filter_list or b in filter_list:
+						upshot[unicode(c + ' - ' + d)] = v
 				else:
 					upshot[unicode(a + ' - ' + b)] = v
 

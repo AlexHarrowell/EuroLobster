@@ -182,13 +182,18 @@ class LobsterClient(object):
 		if metric == u'Link Centrality':
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			upshot = {}
-			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below. 
+			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below.
+				a, b = k
+				print a
+				print b
+				c = g.node[a]['name']
+				d = g.node[b]['name'] 
 				if nedges:
 					filter_list = [n[0] for n in nedges]
-					if k[0] in filter_list or k[1] in filter_list:
-						upshot[unicode(g.node[k[0]]['name'] + ' - ' + g.node[k[1]]['name'])] = v
+					if a in filter_list or b in filter_list:
+						upshot[unicode(c + ' - ' + d)] = v
 				else:
-					upshot[unicode(a['name'] + ' - ' + b['name'])] = v
+					upshot[unicode(a + ' - ' + b)] = v
 
 		if metric == u'Predicted Links':
 			gr = self.make_unigraph_from_multigraph(mg=g)
