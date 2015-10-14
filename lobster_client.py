@@ -136,7 +136,7 @@ class LobsterClient(object):
 		if nedges == None:
 			nedges = g.nodes_iter(data=True)
 		for node in nedges:
-			tld = self.degree(g, [n for n in g.nodes_iter() if n in graph.neighbors(node[0])])
+			tld = self.degree(g, [n for n in g.nodes_iter(data=True) if n[0] in g.neighbors(node[0])])
 			gk = sum(tld.values())/len(tld.values())
 			result[node[1]['name']] = gk/av_degree
 		return result
@@ -163,16 +163,18 @@ class LobsterClient(object):
 		if metric == u'Closeness Centrality':
 			u = centrality.closeness_centrality(g, normalized=True)
 			if nedges:
-				upshot = {k: v for k,v in u.items() if k in nedges}
+				filter_list = [n[0] for n in nedges]
+				upshot = {g.node[k]['name']: v for k,v in u.items() if k in filter_list}
 			else:
-				upshot = u
+				upshot = {g.node[k]['name']: v for k,v in u.items()}
 
 		if metric == u'Betweenness':
                         u = centrality.betweenness_centrality(g, weight='weight', normalized=True)	
 			if nedges:
-				upshot = {k: v for k,v in u.items() if k in nedges}
+				filter_list = [n[0] for n in nedges]
+				upshot = {g.node[k]['name']: v for k,v in u.items() if k in filter_list}
 			else:
-				upshot = u
+				upshot = {g.node[k]['name']: v for k,v in u.items()}
 
 		if metric == u'Greedy_Fragile':
 			upshot = self.greedy_fragile(g, nedges)
@@ -181,13 +183,13 @@ class LobsterClient(object):
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			upshot = {}
 			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below. 
-				a = g[k[0]]
-				b = g[k[1]]
+				a = g.node[k[0]]
+				b = g.node[k[1]]
 				if nedges:
 					if a in nedges or b in nedges:
-						upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = v
+						upshot[unicode(a['name'] + ' - ' + b['name'])] = v
 				else:
-					upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = v
+					upshot[unicode(a['name'] + ' - ' + b['name'])] = v
 
 		if metric == u'Predicted Links':
 			gr = self.make_unigraph_from_multigraph(g)
@@ -195,13 +197,13 @@ class LobsterClient(object):
 			upshot = {}
 			for k, v, p in u:
 				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values.
-					a = gr[k]
-					b = gr[v] 
+					a = gr.node[k]
+					b = gr.node[v] 
 					if nedges:
 						if a in nedges or b in nedges:
-							upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = p
+							upshot[unicode(a['name'] + ' - ' + b['name'])] = p
 					else:
-						upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = p
+						upshot[unicode(a['name'] + ' - ' + b['name'])] = p
 		self.cacheflow(ck, data=upshot)
 		return upshot
                 

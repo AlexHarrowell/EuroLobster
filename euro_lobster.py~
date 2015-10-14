@@ -49,10 +49,8 @@ def get_graphs():
 	return graphs
 
 def save_graphs(graphs):
-        print graphs
 	for g,d in graphs.items():
 		f = open(g, 'w')
-                print d.nodes(data=True)
 		data = json_graph.adjacency_data(d)
 		s = json.dump(data, f)
 		f.close()
