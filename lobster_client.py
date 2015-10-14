@@ -109,23 +109,23 @@ class LobsterClient(object):
 		total_centrality = (graph.order()) * nwc
 		result = {}
 		if nedges == None:
-			nedges = graph.nodes()
+			nedges = graph.nodes(data=True)
 		for n in nedges:
-			if n in graph.nodes():
-				neigh_central = sum([v for k,v in nodes.iteritems() if k in graph.neighbors(n)])  
-				order = graph.order() - (1 + len(graph.neighbors(n)))
-				mc = nodes[n] + neigh_central
+			if n[0] in graph.nodes():
+				neigh_central = sum([v for k,v in nodes.iteritems() if k in graph.neighbors(n[0])])  
+				order = graph.order() - (1 + len(graph.neighbors(n[0])))
+				mc = nodes[n[0]] + neigh_central
 				gf = nwc - ((total_centrality - mc)/order)
-				result[n] = gf
+				result[n[1]['name']] = gf
 			else:
-				result[n] = 0
+				result[n[1]['name']] = 0
 		return result
 
 	def degree(self, graph, nedges):
 		g = graph
 		if nedges == None:
-			nedges = g.nodes_iter()
-		result = {n: sum([e[2]['weight']['weight'] for e in g.edges_iter(n, data=True)]) for n in nedges}
+			nedges = g.nodes_iter(data=True)
+		result = {n[1]['name']: sum([e[2]['weight']['weight'] for e in g.edges_iter(n[0], data=True)]) for n in nedges}
 		return result
 
 	def gatekeeper(self, graph, nedges):
@@ -134,11 +134,11 @@ class LobsterClient(object):
 		av_degree = sum(d.values())/len(d.values())
 		result = {}
 		if nedges == None:
-			nedges = g.nodes_iter()
+			nedges = g.nodes_iter(data=True)
 		for node in nedges:
-			tld = self.degree(g, [n for n in g.nodes_iter() if n in graph.neighbors(node)])
+			tld = self.degree(g, [n for n in g.nodes_iter() if n in graph.neighbors(node[0])])
 			gk = sum(tld.values())/len(tld.values())
-			result[node] = gk/av_degree
+			result[node[1]['name']] = gk/av_degree
 		return result
 		
 	def get_metric_from_graph(self, metric=None, nedges=None, keyword=None, graph=None, month=None):
@@ -151,7 +151,7 @@ class LobsterClient(object):
 
 		g = graph
 		if keyword:
-			nedges = [node[0] for node in g.nodes_iter(data=True) if node[1]['type'] == keyword]
+			nedges = [node for node in g.nodes_iter(data=True) if node[1]['type'] == keyword]
 		#'''if a keyword search is specified, we list the nodes where that keyword is found in one of its attributes'''
 		
 		if metric == u'Degree':		
@@ -181,23 +181,27 @@ class LobsterClient(object):
 			u = centrality.edge_betweenness_centrality(g, weight='weight', normalized=True)
 			upshot = {}
 			for k, v in u.items(): # doing it in a similar way to the other linkwise metric below. 
+				a = g[k[0]]
+				b = g[k[1]]
 				if nedges:
-					if k[0] in nedges or k[1] in nedges:
-						upshot[unicode(k[0] + ' - ' + k[1])] = v
+					if a in nedges or b in nedges:
+						upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = v
 				else:
-					upshot[unicode(k[0] + ' - ' + k[1])] = v
+					upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = v
 
 		if metric == u'Predicted Links':
 			gr = self.make_unigraph_from_multigraph(g)
 			u = link_prediction.resource_allocation_index(gr)
-			upshot = {} #[]
+			upshot = {}
 			for k, v, p in u:
-				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values. 
+				if p > 0: #RAI examines all nonexistent edges in graph and will return all of them, including ones with a zero index. we therefore filter for positive index values.
+					a = gr[k]
+					b = gr[v] 
 					if nedges:
-						if k in nedges or v in nedges:
-							upshot[unicode(k + ' - ' + v)] = p
+						if a in nedges or b in nedges:
+							upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = p
 					else:
-						upshot[unicode(k + ' - ' + v)] = p
+						upshot[unicode(a[1]['name'] + ' - ' + b[1]['name'])] = p
 		self.cacheflow(ck, data=upshot)
 		return upshot
                 

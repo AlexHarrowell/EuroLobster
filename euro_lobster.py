@@ -107,7 +107,7 @@ def add_to_graph(meeting, graphs, graph_id, lobbyists):
 			graphs[(graph_id)] = graph
 		graph.add_path(path, date=meeting['date'], locale=meeting['locale'], subject=meeting['subject'], weight=meeting['weight'])	#wrapper to avoid repeating myself	
 		graph[path[0]]['type'] == 'commissioner' #the path starts with the commissioner
-		graph[path[:1]]['type'] == 'lobby' #and ends with the lobby
+		graph[path[-1]]['type'] == 'lobby' #and ends with the lobby
 		for n in path:
 			graph[n]['name'] = readable_paths[n] #now that nodes are identified by a unique hash, we need to add a human readable name in a node attribute
 			if n in lobbyists_to_flag:
