@@ -76,10 +76,13 @@ def get_lobbyists_clients(source_uri):
 			if u'No clients' not in row['Clients']:
 				for client in (row['Clients']).split(','):
 					if client != 'S.A.': #French and Spanish people put commas in front of this
-						client_lobbyist_mapping[(client)] = row['(Organisation) name'] 
+						if client in client_lobbyist_mapping:
+							client_lobbyist_mapping[(client)] = (client_lobbyist_mapping[(client)]).append(row['(Organisation) name'])
+						else:
+							client_lobbyist_mapping[(client)] = [(row['(Organisation) name'])] 
 		else:
 			if row['Person with legal responsibility']:
-				client_lobbyist_mapping[(row['(Organisation) name'])] = row['Person with legal responsibility']
+				client_lobbyist_mapping[(row['(Organisation) name'])] = [row['Person with legal responsibility']]
 	#data.close()
 	return client_lobbyist_mapping
 
@@ -126,29 +129,30 @@ def add_to_graph(meeting, graphs, graph_id, lobbyists):
 	
 	for lobby in meeting['lobby']: # one path per commissioner-lobby pairing
 		if lobby in lobbyists: # if there are lobbyists, one lobbyist-client pairing
-			if 'staffer' in meeting:
-				for s in meeting['staffer']: #one path per commissioner-staffer-lobby combination
-					#we're creating a unique hash on name, DG, job title/lobbying client, and flavour i.e commissioner, staffer, lobbyist, lobby
-					c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], u'commissioner') 
-					#this means we need to keep a lookup table of hashes and meaningful names
-					readable_paths[c] = meeting['commissioner']
-					st = hasher(s, meeting['dg'], meeting['job'], u'staffer')
-					readable_paths[st] = s
-					#and track which nodes, as identified by their hash, are staffers
-					staffers_to_flag.append(st)
-					b = hasher(lobbyists[(lobby)], None, lobby, u'lobbyist')
-					readable_paths[b] = lobbyists[(lobby)]
-					#or lobbyists
-					lobbyists_to_flag.append(b)
-					paths.append([c, st, b, lobby])
+			for lobbyist in lobbyists[(lobby)]:
+				if 'staffer' in meeting:
+					for s in meeting['staffer']: #one path per commissioner-staffer-lobby combination
+						#we're creating a unique hash on name, DG, job title/lobbying client, and flavour i.e commissioner, staffer, lobbyist, lobby
+						c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], u'commissioner') 
+						#this means we need to keep a lookup table of hashes and meaningful names
+						readable_paths[c] = meeting['commissioner']
+						st = hasher(s, meeting['dg'], meeting['job'], u'staffer')
+						readable_paths[st] = s
+						#and track which nodes, as identified by their hash, are staffers
+						staffers_to_flag.append(st)
+						b = hasher(lobbyist, None, lobby, u'lobbyist')
+						readable_paths[b] = lobbyist
+						#or lobbyists
+						lobbyists_to_flag.append(b)
+						paths.append([c, st, b, lobby])
 					
-			else:
-				c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], u'commissioner')
-				b = hasher(lobbyists[(lobby)], None, lobby, u'lobbyist')
-				lobbyists_to_flag.append(b)
-				paths.append([c, b, lobby]) #deal with case where lobbyists present but no staffers
-				readable_paths[c] = meeting['commissioner']
-				readable_paths[b] = lobbyists[(lobby)]
+				else:
+					c = hasher(meeting['commissioner'], meeting['dg'], meeting['job'], u'commissioner')
+					b = hasher(lobbyist, None, lobby, u'lobbyist')
+					lobbyists_to_flag.append(b)
+					paths.append([c, b, lobby]) #deal with case where lobbyists present but no staffers
+					readable_paths[c] = meeting['commissioner']
+					readable_paths[b] = lobbyist
 		else:
 			if 'staffer' in meeting:
 				for s in meeting['staffer']:
@@ -297,7 +301,11 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 						if meeting['date'] != 'Cancelled': #this is a thing although check for tr.td.string should get it
 							#parse the content into a row
 							meeting['commissioner'] = details['name']
-							meeting['lobbyists'] = [lobbyists[(l)] for l in meeting['lobby'] if l in lobbyists]
+							#lob = []
+							#for l in meeting['lobby']:
+								#if l in lobbyists:
+									#lob.extend(lobbyists[(l)])
+							#meeting['lobbyists'] = lob
                                                         t = time.strptime(str(meeting['date']), '%d/%m/%Y')
 							graph_id = time.strftime('./Graphs/%B%Y.json', t)
 							#identify monthly graphs
