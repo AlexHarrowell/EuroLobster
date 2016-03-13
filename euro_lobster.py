@@ -15,7 +15,7 @@ import time
 import StringIO
 import hashlib
 
-root_page = 'http://ec.europa.eu/commission/'
+root_page = 'http://ec.europa.eu/commission/2014-2019_en'
 weighting_source = '''https://docs.google.com/spreadsheets/d/1nCDV4LTyKUfoviiUz4U1sOlDulO6wH40G9fR9J2NinA/pub?gid=1008557036&single=true&output=csv''' #contains output from a survey of who is important
 #lobbysource = '''http://ec.europa.eu/transparencyregister/public/consultation/statistics.do?action=getLobbyistsExcel&fileType=XLS_NEW''' #a register of lobbies is here
 lobbysource = './full_export_new.xls'
@@ -77,12 +77,14 @@ def get_lobbyists_clients(source_uri):
 				for client in (row['Clients']).split(','):
 					if client != 'S.A.': #French and Spanish people put commas in front of this
 						if client in client_lobbyist_mapping:
-							client_lobbyist_mapping[(client)] = (client_lobbyist_mapping[(client)]).append(row['(Organisation) name'])
+							c = client_lobbyist_mapping[client]
+							c.append(row['(Organisation) name'])
+							client_lobbyist_mapping[client] = c
 						else:
-							client_lobbyist_mapping[(client)] = [(row['(Organisation) name'])] 
+							client_lobbyist_mapping[client] = [row['(Organisation) name']] 
 		else:
 			if row['Person with legal responsibility']:
-				client_lobbyist_mapping[(row['(Organisation) name'])] = [row['Person with legal responsibility']]
+				client_lobbyist_mapping[row['(Organisation) name']] = [row['Person with legal responsibility']]
 	#data.close()
 	return client_lobbyist_mapping
 
@@ -175,16 +177,9 @@ def get_commissioners(root_page):
 	#returns the URIs for the current list of European Commissioners given the front page
 	soup = soupify(root_page)	
 	commissioners = []
-	president = soup.find('div', {'class':'field-content member-details'})
-	commissioners.append(president.a['href']) #right. they've added the list no fewer than three times in three tabs.
-	#locate commissioners' details on page
-	commissioner_block = soup.find('div', id="quicktabs-tabpage-team_members-0")
-	members = commissioner_block.find_all('div', {'class':'field-content member-details'})
-	for member in members:
-		if member.find_next('span', {'class': 'term-39 In office label status'}).string == 'In office':
-			#don't add any commissioners no longer in office
-			commissioners.append(member.a['href'])
-			#obtain their URI
+	links = soup.find_all('span', {'class':'field-content'})
+	for link in links:
+		commissioners.append(link.a['href'])	
 	return commissioners
 
 def get_commissioner_detail(commish, weightings):
@@ -193,11 +188,13 @@ def get_commissioner_detail(commish, weightings):
 	record = {}
 	record['role'] = (soup.find('span', {'class':'role'})).string.strip()
 	#gets commissioner's rank eg President, 1st VP, VP, Commish
-	if record['role'] == u'High Representative':
-		record['role'] = u'Vice-President' #the HR is a VP.
 	record['name'] = (soup.find('span', {'class':'first-name'})).string.strip() + ' ' + (soup.find('span', {'class':'last-name'})).string.strip()
 	if record['role'] != 'President': #it's not just blank for him, it's missing.
-		record['job'] = (soup.find('span', {'class':'header-line-3'})).string.strip()
+		if record['role'] == u'High Representative':
+			record['job'] = record['role']
+			record['role'] = u'Vice-President' #the HR is a VP.
+		else:
+			record['job'] = (soup.find('span', {'class':'header-line-3'})).string.strip()
 	else:
 		record['job'] = record['role']
 	#gets their department affiliation
@@ -215,10 +212,10 @@ def get_commissioner_detail(commish, weightings):
 	#else:
 		#link_name = u'team of ' + (record['name'])
 	#print link_name
-	new_uri = soup.find('a', text='team page')['href']
+	new_uri = 'http://ec.europa.eu' + soup.find('a', text='Team page')['href']
 	soup = soupify(new_uri)
 	record['staffers'] = {}
-	stf = soup.find_all('div', {'class':'member-details-text'}) #was field-content member-details
+	stf = soup.find_all('div', {'class':'listing__top'}) #was field-content member-details
 	if record['name'] == u'Jean-Claude Juncker':
 		record['staffers'][u'José Eduardo Leandro'] = u'Senior Advisor' # this bloke works as principal economic adviser either for the Council Presidency or for DG FIN depending on source. he isn't included in Juncker's team. but he is having meetings as part of it.
 	if record['name'] == u'Karmenu Vella':
@@ -243,25 +240,27 @@ def get_commissioner_detail(commish, weightings):
 		record['staffers'][u'Vygandas Jankunas'] = u'Member of Cabinet' #rotated back to the DG Research in March '15
 	for stfr in stf:
 		staffer = {}
-		if stfr.span.string != None: #checks for presence of content
-			try:
-				stafferjob = ((stfr.find('span', {'class':'label'})).string.strip())
-				stafferfirstname = ((stfr.find('span', {'class':'first-name'})).string.strip()).replace('-', ' ')
-				stafferlastname = ((stfr.find('span', {'class':'last-name'})).string.strip()).replace('-', ' ')
-				staffername = stafferfirstname + ' ' + stafferlastname  #some staffers are inconsistent about hyphens so we're going to remove all hyphens and compare the hyphenless versions.
-				if stafferjob in weightings: #this check is here to deal with any weird job titles we didn't spot, also archivists and drivers, who some commissioners list.
-					record['staffers'][(staffername)] = stafferjob #basically the same stuff for the staffers
-			except AttributeError: #Canetes fix. contains empty items
-				print 'empty item: ', stfr				
-				pass	
+		#if stfr.div.div != None: #checks for presence of content
+		try:
+			stafferjob = (stfr.find('div', {'class': 'field__items'}).string.strip())
+			staffername = (stfr.find('h3').string.strip()).replace('-', ' ').lower()
+			#some staffers are inconsistent about hyphens so we're going to remove all hyphens and compare the hyphenless versions, also force lower case
+			if stafferjob in weightings:
+#this check is here to deal with any weird job titles we didn't spot, also archivists and drivers, who some commissioners list.
+				record['staffers'][(staffername)] = stafferjob #basically the same stuff for the staffers
+		except AttributeError: #Canetes fix. contains empty items
+			print 'empty item: ', stfr				
+			pass	
 	return record
 
 def special_cases(ms):
-	cases = {u'Leon Delvaux': u'Léon Delvaux', u'Sara Nelen': u'Sarah Nelen', u'Bernardus Smulders': u'Ben Smulders', u'Iwona Piorko Bermig': u'Iwona Piorko', u'Laure Chapuis-Kombos': u'Laure Chapuis', u'Stig Joergen Gren': u'Jörgen Gren', u'Dagmara Koska': u'Dagmara Maria Koska', u'Tuure Taneli Lahti': u'Taneli Lahti', u'Valérie Herzberg': u'Valerie Herzberg', u'David Mueller': u'David Müller', u'Christian Burgsmueller': u'Christian Burgsmüller', u'Maria Asenius': u'Maria Åsenius', u'Miguel Ceballos Baron': u'Miguel Ceballos Barón', u'Denis Cajo': u'Denis Čajo', u'Maria Cristina Lobillo Borrero': u'Cristina Lobillo Borrero', u'Isaac Valero Ladron': u'Isaac Valero Ladrón', u'Andras Inotai': u'András G. Inotai', u'Juergen Mueller': u'Jürgen Müller', u'Arunas Vinciunas': u'Arūnas Vinčiūnas', u'Arunas Ribokas': u'Arūnas Ribokas', u'Konstantinos Sasmatzoglou': u'Kostas Sasmatzoglou', u'Julie Fionda': u'Julie Anne Fionda', u"Simon O'Connor": u'Simon O\u2019Connor', u'Kim-Tobias Eling': u'Kim Eling', u'Nathalie De Basaldua Lemarchand': u'Nathalie de Basaldúa', u'Matej Zakonjsek': u'Matej Zakonjšek', u'Desiree Oen': u'Désirée Oen', u'Friedrich-Nikolaus Von Peter': u'Nikolaus von Peter', u'Natasa Vidovic': u'Nataša Vidovič', u'Rolf Carsten Bermig': u'Carsten Bermig', u'Kaius Kristian Hedberg': u'Kristian Hedberg', u'Monika Ladmanova': u'Monika Ladmanová', u'Jonathan Michael Hill': u'Jonathan Hill', u'Jan Mikolaj Dzieciolowski': u'Jan Mikołaj Dzięciołowski', u'Soren Schonberg': u'Søren Schønberg', u'Mette Dyrskjot': u'Mette Dyrskjøt', u'Ditte Juul-Jorgensen': u'Ditte Juul-Jørgensen', u'Ditte Juul Jorgensen': u'Ditte Juul Jørgensen', u'Antonio Lowndes Marques De Araujo Vicente': u'António Vicente', u'Maria Da Graca Carvalho': u'Maria da Graça Carvalho', u'Alfredo Sousa de Jesus': u'Alfredo Sousa', u'Alfredo Sousa De Jesus': u'Alfredo Sousa', u'Tomas Nejdl': u'Tomáš Nejdl', u'Gabriel - Calin Onaca': u'Gabriel Onaca', u'Mikel Landabaso Alvarez': u'Mikel Landabaso', u'Linsey Mccallum': u'Linsey McCallum'}
+	cases = {u'Sara Nelen': u'Sarah Nelen', u'Bernardus Smulders': u'Ben Smulders', u'Iwona Piorko Bermig': u'Iwona Piorko', u'Laure Chapuis-Kombos': u'Laure Chapuis', u'Stig Joergen Gren': u'Jörgen Gren', u'Dagmara Koska': u'Dagmara Maria Koska', u'Tuure Taneli Lahti': u'Taneli Lahti', u'Valérie Herzberg': u'Valerie Herzberg', u'David Mueller': u'David Müller', u'Christian Burgsmueller': u'Christian Burgsmüller', u'Maria Asenius': u'Maria Åsenius', u'Miguel Ceballos Baron': u'Miguel Ceballos Barón', u'Denis Cajo': u'Denis Čajo', u'Maria Cristina Lobillo Borrero': u'Cristina Lobillo Borrero', u'Isaac Valero Ladron': u'Isaac Valero Ladrón', u'Andras Inotai': u'András G. Inotai', u'Juergen Mueller': u'Jürgen Müller', u'Arunas Vinciunas': u'Arūnas Vinčiūnas', u'Arunas Ribokas': u'Arūnas Ribokas', u'Konstantinos Sasmatzoglou': u'Kostas Sasmatzoglou', u'Julie Fionda': u'Julie Anne Fionda', u"Simon O'Connor": u'Simon O\u2019Connor', u'Kim-Tobias Eling': u'Kim Eling', u'Nathalie De Basaldua Lemarchand': u'Nathalie de Basaldúa', u'Matej Zakonjsek': u'Matej Zakonjšek', u'Desiree Oen': u'Désirée Oen', u'Friedrich-Nikolaus Von Peter': u'Nikolaus von Peter', u'Natasa Vidovic': u'Nataša Vidovič', u'Rolf Carsten Bermig': u'Carsten Bermig', u'Kaius Kristian Hedberg': u'Kristian Hedberg', u'Monika Ladmanova': u'Monika Ladmanová', u'Jonathan Michael Hill': u'Jonathan Hill', u'Jan Mikolaj Dzieciolowski': u'Jan Mikołaj Dzięciołowski', u'Soren Schonberg': u'Søren Schønberg', u'Mette Dyrskjot': u'Mette Dyrskjøt', u'Ditte Juul-Jorgensen': u'Ditte Juul-Jørgensen', u'Ditte Juul Jorgensen': u'Ditte Juul Jørgensen', u'Antonio Lowndes Marques De Araujo Vicente': u'António Vicente', u'Maria Da Graca Carvalho': u'Maria da Graça Carvalho', u'Alfredo Sousa de Jesus': u'Alfredo Sousa', u'Alfredo Sousa De Jesus': u'Alfredo Sousa', u'Tomas Nejdl': u'Tomáš Nejdl', u'Gabriel - Calin Onaca': u'Gabriel Onaca', u'Mikel Landabaso Alvarez': u'Mikel Landabaso', u'Linsey Mccallum': u'Linsey McCallum'}
 	for s, c in cases.items():
-		if s in ms:
+		lw = s.lower()
+		cl = c.lower()	
+		if lw in ms:
 			ms.remove(s)
-			ms.append(c)	
+			ms.append(cl)	
 	return ms
 #you made me do this. You bastards. all of these are staffers who sometimes use a different version of their names in the meetings register to the one they use in the team lists.	anyway, decided to pull these out and centralise the special cases in a special cases function.
 
@@ -269,6 +268,7 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 		soup = soupify(uri)
 		#gets meetings for a commissioner or staff member given output from get_commissioner_detail, parses them, and adds them to the networkx graph
 		def inner_parser(uri, details, lobbyists, graphs, staffers):
+			print uri
 			soup = soupify(uri)
 			crufto = re.compile('[\t\r\n]|(  )') #strips cruft
 			table = soup.find('table', id='listMeetingsTable')
@@ -290,7 +290,7 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 #meetings with staffers come as a package and include a name field. which can include multiple staffers.	
 						else:
                                                     	ms = [(s.replace('  ', ' ')) for s in strings[0]]
-							meeting['staffer'] = special_cases(ms)
+							meeting['staffer'] = special_cases(ms.lower())
                                                         meeting['date'] = (strings[1])[0]              
                                                         meeting['locale'] = (strings[2])[0]
                                                         meeting['lobby'] = [re.sub(crufto, '', s) for s in strings[3]]
@@ -315,9 +315,11 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 		ll = soup.find('span', class_=re.compile('pagelinks|pagelinks ')) #yes. the span class "pagelinks" is sometimes "pagelinks" and sometimes "pagelinks " unsystematically. hence this wanky code.
 		#page through the meetings, generating the URI for each page
 		if ll:
-			uribase = 'http://ec.europa.eu' + ll.a['href']
-			for i in range(0, len(ll)):
-				if i == 0:
+			pages = ll.find_all('a')			
+			uribase = 'http://ec.europa.eu' + pages[0]['href']
+			last_uri_count = ((pages[-1]['href']).split('=', 1))[1]
+			for i in range(1, last_uri_count):
+				if i == 1:
 					uri = uribase
 				else:
 					uri = uribase + str(i)
@@ -339,6 +341,7 @@ if 'Graphs' not in os.listdir('.'):
 		os.mkdir('Graphs')
 
 weightings = get_weighting_data(weighting_source)
+print weightings
 lobbyclients = get_lobbyists_clients(lobbysource)
 graphs = get_graphs()
 commissioners = get_commissioners(root_page)
