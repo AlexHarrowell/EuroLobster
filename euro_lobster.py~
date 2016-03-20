@@ -26,8 +26,11 @@ def get_weighting_data(source):
 	reader = csvkit.py2.CSVKitDictReader(survey)
 	for row in reader:
 		if row[u'Timestamp'] == u'% of a Juncker unit':
-			return row 
-			#get survey material as a lookup table
+			r = {}
+			for k, v in row.items():
+				r[k.lower()] = v
+			return r
+			#get survey material as a lookup table, lowerised
 
 def soupify(uri):
 	#helper to avoid repeating getting the page and loading it into parser
@@ -97,8 +100,8 @@ def get_weighting(dept, job, weightings):
 		return 0.85*0.7 #vp rank * average of the project teams' ranking. I fucking forgot the guy
 	if dept == u'Budget & Human Resources':
 		return 0.85*.07
-	job_weight = weightings[(job)]
-	dept_weight = weightings[(dept)]
+	job_weight = weightings[(job.lower())]
+	dept_weight = weightings[(dept.lower())]
 	return float(dept_weight) * float(job_weight) #returns weighting from the survey data. finds job title and department. department weighting multiplied by job weighting, which is normalised to the average.
 
 def add_to_graph(meeting, graphs, graph_id, lobbyists):
@@ -217,34 +220,44 @@ def get_commissioner_detail(commish, weightings):
 	record['staffers'] = {}
 	stf = soup.find_all('div', {'class':'listing__top'}) #was field-content member-details
 	if record['name'] == u'Jean-Claude Juncker':
-		record['staffers'][u'José Eduardo Leandro'] = u'Senior Advisor' # this bloke works as principal economic adviser either for the Council Presidency or for DG FIN depending on source. he isn't included in Juncker's team. but he is having meetings as part of it.
+		record['staffers'][u'josé eduardo leandro'] = u'senior advisor' # this bloke works as principal economic adviser either for the Council Presidency or for DG FIN depending on source. he isn't included in Juncker's team. but he is having meetings as part of it.
+		record['staffers'][u'carlo zadra'] = u'senior legal adviser' # resigned 03/2016
 	if record['name'] == u'Karmenu Vella':
-		record['staffers'][u'Patrick Costello'] = u'Chef du Cabinet' # he quit in august 2015 and was replaced
+		record['staffers'][u'patrick costello'] = u'chef du cabinet' # he quit in august 2015 and was replaced
 	if record['name'] == u'Pierre Moscovici':
-		record['staffers'][u'Malgorzata Iskra'] = u'Assistant' #she seems to have disappeared. worrying.
+		record['staffers'][u'malgorzata iskra'] = u'assistant' #she seems to have disappeared. worrying.
 	if record['name'] == u'Carlos Moedas':
-		record['staffers'][u'Eveline Lecoq'] = u'Member' #another disappearance.
+		record['staffers'][u'eveline lecoq'] = u'member' #another disappearance.
 	if record['name'] == u'Christos Stylianides':
-		record['staffers'][u'Caterine Ebah Moussa'] = u'Member of Cabinet' #Ebah Moussa deputises for Davinia Wood during maternity leave
+		record['staffers'][u'caterine ebah moussa'] = u'member of cabinet' #Ebah Moussa deputises for Davinia Wood during maternity leave
 	#this is how you get the headers. as I say, picky
 	if record['name'] == u'Violeta Bulc':
-		record['staffers'][u'Marjeta Jager'] = u'Head of Cabinet' #replaced
+		record['staffers'][u'marjeta jager'] = u'head of cabinet' #replaced
 	if record['name'] == u'Kristalina Georgieva':
-		record['staffers'][u'Mariana Hristcheva'] = u'Head of Cabinet' #replaced
+		record['staffers'][u'mariana hristcheva'] = u'head of cabinet' #replaced
+	if record['name'] == u'Valdis Dombrovskis':
+		record['staffers'][u'tatyana panova'] = u'policy officer' #another disappearance. worrying
+	if record['name'] == u'Jyrki Katainen':
+		record['staffers'][u'heidi jern'] = u'member of cabinet' #quit 01/2016 to go to Yale
+		record['staffers'][u'valerie herzberg'] = u'member of cabinet' #seems to have gone 
+	if record['name'] == u'Günther Oettinger':
+		record['staffers'][u'eric mamer'] = u'deputy chef de cabinet' #xfers to DG GROW as director, competitiveness
 	if record['name'] == u'Dimitris Avramopoulos':
-		record['staffers'][u'Kostas Sasmatzoglou'] = u'Communication Adviser' #replaced
+		record['staffers'][u'kostas sasmatzoglou'] = u'communication adviser' #replaced
 	if u'Corina' in record['name']:
-		record['staffers'][u'Dragos Bucurenci'] = u'Communication Adviser' #replaced
-		record['staffers'][u'Mikel Landabaso'] = u'Head of Cabinet' #gone
+		record['staffers'][u'dragos bucurenci'] = u'communication adviser' #replaced
+		record['staffers'][u'mikel landabaso'] = u'head of cabinet' #gone
 	if record['name'] == u'Carlos Moedas':
-		record['staffers'][u'Vygandas Jankunas'] = u'Member of Cabinet' #rotated back to the DG Research in March '15
+		record['staffers'][u'vygandas jankunas'] = u'member of cabinet' #rotated back to the DG Research in March '15
 	for stfr in stf:
 		staffer = {}
 		#if stfr.div.div != None: #checks for presence of content
 		try:
-			stafferjob = (stfr.find('div', {'class': 'field__items'}).string.strip())
-			staffername = (stfr.find('h3').string.strip()).replace('-', ' ').lower()
+			stafferjob = (stfr.find('div', {'class': 'field__items'}).string.strip()).lower()
+			sn = (stfr.find('h3').string.strip()).replace('-', ' ').lower().split(' ')
+			staffername = u' '.join([a for a in sn if a != u''])
 			#some staffers are inconsistent about hyphens so we're going to remove all hyphens and compare the hyphenless versions, also force lower case
+			#inconsistently, some pages now add an invisible nonbreaking space to names...
 			if stafferjob in weightings:
 #this check is here to deal with any weird job titles we didn't spot, also archivists and drivers, who some commissioners list.
 				record['staffers'][(staffername)] = stafferjob #basically the same stuff for the staffers
@@ -254,13 +267,11 @@ def get_commissioner_detail(commish, weightings):
 	return record
 
 def special_cases(ms):
-	cases = {u'Sara Nelen': u'Sarah Nelen', u'Bernardus Smulders': u'Ben Smulders', u'Iwona Piorko Bermig': u'Iwona Piorko', u'Laure Chapuis-Kombos': u'Laure Chapuis', u'Stig Joergen Gren': u'Jörgen Gren', u'Dagmara Koska': u'Dagmara Maria Koska', u'Tuure Taneli Lahti': u'Taneli Lahti', u'Valérie Herzberg': u'Valerie Herzberg', u'David Mueller': u'David Müller', u'Christian Burgsmueller': u'Christian Burgsmüller', u'Maria Asenius': u'Maria Åsenius', u'Miguel Ceballos Baron': u'Miguel Ceballos Barón', u'Denis Cajo': u'Denis Čajo', u'Maria Cristina Lobillo Borrero': u'Cristina Lobillo Borrero', u'Isaac Valero Ladron': u'Isaac Valero Ladrón', u'Andras Inotai': u'András G. Inotai', u'Juergen Mueller': u'Jürgen Müller', u'Arunas Vinciunas': u'Arūnas Vinčiūnas', u'Arunas Ribokas': u'Arūnas Ribokas', u'Konstantinos Sasmatzoglou': u'Kostas Sasmatzoglou', u'Julie Fionda': u'Julie Anne Fionda', u"Simon O'Connor": u'Simon O\u2019Connor', u'Kim-Tobias Eling': u'Kim Eling', u'Nathalie De Basaldua Lemarchand': u'Nathalie de Basaldúa', u'Matej Zakonjsek': u'Matej Zakonjšek', u'Desiree Oen': u'Désirée Oen', u'Friedrich-Nikolaus Von Peter': u'Nikolaus von Peter', u'Natasa Vidovic': u'Nataša Vidovič', u'Rolf Carsten Bermig': u'Carsten Bermig', u'Kaius Kristian Hedberg': u'Kristian Hedberg', u'Monika Ladmanova': u'Monika Ladmanová', u'Jonathan Michael Hill': u'Jonathan Hill', u'Jan Mikolaj Dzieciolowski': u'Jan Mikołaj Dzięciołowski', u'Soren Schonberg': u'Søren Schønberg', u'Mette Dyrskjot': u'Mette Dyrskjøt', u'Ditte Juul-Jorgensen': u'Ditte Juul-Jørgensen', u'Ditte Juul Jorgensen': u'Ditte Juul Jørgensen', u'Antonio Lowndes Marques De Araujo Vicente': u'António Vicente', u'Maria Da Graca Carvalho': u'Maria da Graça Carvalho', u'Alfredo Sousa de Jesus': u'Alfredo Sousa', u'Alfredo Sousa De Jesus': u'Alfredo Sousa', u'Tomas Nejdl': u'Tomáš Nejdl', u'Gabriel - Calin Onaca': u'Gabriel Onaca', u'Mikel Landabaso Alvarez': u'Mikel Landabaso', u'Linsey Mccallum': u'Linsey McCallum'}
+	cases = {u'Sara Nelen': u'Sarah Nelen', u'Bernardus Smulders': u'Ben Smulders', u'Iwona Piorko Bermig': u'Iwona Piorko', u'Laure Chapuis-Kombos': u'Laure Chapuis', u'Stig Joergen Gren': u'Jörgen Gren', u'Dagmara Koska': u'Dagmara Maria Koska', u'Tuure Taneli Lahti': u'Taneli Lahti', u'Valérie Herzberg': u'Valerie Herzberg', u'David Mueller': u'David Müller', u'Christian Burgsmueller': u'Christian Burgsmüller', u'Maria Asenius': u'Maria Åsenius', u'Miguel Ceballos Baron': u'Miguel Ceballos Barón', u'Denis Cajo': u'Denis Čajo', u'Maria Cristina Lobillo Borrero': u'Cristina Lobillo Borrero', u'Isaac Valero Ladron': u'Isaac Valero Ladrón', u'Andras Inotai': u'András G. Inotai', u'Juergen Mueller': u'Jürgen Müller', u'Arunas Vinciunas': u'Arūnas Vinčiūnas', u'Arunas Ribokas': u'Arūnas Ribokas', u'Konstantinos Sasmatzoglou': u'Kostas Sasmatzoglou', u'Julie Fionda': u'Julie Anne Fionda', u"Simon O'Connor": u'Simon O\u2019Connor', u'Kim-Tobias Eling': u'Kim Eling', u'Nathalie De Basaldua Lemarchand': u'Nathalie de Basaldúa', u'Matej Zakonjsek': u'Matej Zakonjšek', u'Desiree Oen': u'Désirée Oen', u'Friedrich-Nikolaus Von Peter': u'Nikolaus von Peter', u'Natasa Vidovic': u'Nataša Vidovič', u'Rolf Carsten Bermig': u'Carsten Bermig', u'Kaius Kristian Hedberg': u'Kristian Hedberg', u'Monika Ladmanova': u'Monika Ladmanová', u'Jonathan Michael Hill': u'Jonathan Hill', u'Jan Mikolaj Dzieciolowski': u'Jan Mikołaj Dzięciołowski', u'Soren Schonberg': u'Søren Schønberg', u'Mette Dyrskjot': u'Mette Dyrskjøt', u'Ditte Juul-Jorgensen': u'Ditte Juul-Jørgensen', u'Ditte Juul Jorgensen': u'Ditte Juul Jørgensen', u'Antonio Lowndes Marques De Araujo Vicente': u'António Vicente', u'Maria Da Graca Carvalho': u'Maria da Graça Carvalho', u'Alfredo Sousa de Jesus': u'Alfredo Sousa', u'Alfredo Sousa De Jesus': u'Alfredo Sousa', u'Tomas Nejdl': u'Tomáš Nejdl', u'Gabriel - Calin Onaca': u'Gabriel Onaca', u'Mikel Landabaso Alvarez': u'Mikel Landabaso', u'Linsey Mccallum': u'Linsey McCallum', u'Marlene MADSEN': u'Marlene Rosemarie Madsen', u'Marika LAUTSO-MOUNIER': u'Marika Lautso-Mousnier'} 	
 	for s, c in cases.items():
-		lw = s.lower()
-		cl = c.lower()	
-		if lw in ms:
+		if s in ms:
 			ms.remove(s)
-			ms.append(cl)	
+			ms.append(c.lower())	
 	return ms
 #you made me do this. You bastards. all of these are staffers who sometimes use a different version of their names in the meetings register to the one they use in the team lists.	anyway, decided to pull these out and centralise the special cases in a special cases function.
 
@@ -290,11 +301,13 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 #meetings with staffers come as a package and include a name field. which can include multiple staffers.	
 						else:
                                                     	ms = [(s.replace('  ', ' ')) for s in strings[0]]
-							meeting['staffer'] = special_cases(ms.lower())
+							meeting['staffer'] = [m.lower() for m in special_cases(ms)]
                                                         meeting['date'] = (strings[1])[0]              
                                                         meeting['locale'] = (strings[2])[0]
                                                         meeting['lobby'] = [re.sub(crufto, '', s) for s in strings[3]]
                                                         meeting['subject'] = (strings[4])[0]
+							if u'heidi jern' in meeting['staffer']:
+								print meeting['staffer'], details['staffers']
 							meeting['job'] = [details['staffers'][(staffer.replace('-', ' '))] for staffer in meeting['staffer']]
 							staffer_weights = [float(get_weighting(meeting['dg'], job, weightings)) for job in meeting['job']]	
 							meeting['weight'] = float(sum(staffer_weights)/len(staffer_weights))
@@ -315,9 +328,11 @@ def meeting_parser(uri, details, lobbyists, graphs, staffers):
 		ll = soup.find('span', class_=re.compile('pagelinks|pagelinks ')) #yes. the span class "pagelinks" is sometimes "pagelinks" and sometimes "pagelinks " unsystematically. hence this wanky code.
 		#page through the meetings, generating the URI for each page
 		if ll:
-			uribase = 'http://ec.europa.eu' + ll.a['href']
-			for i in range(0, len(ll)):
-				if i == 0:
+			pages = ll.find_all('a')			
+			uribase = 'http://ec.europa.eu' + pages[0]['href']
+			last_uri_count = ((pages[-1]['href']).split('='))[-1]
+			for i in range(1, int(last_uri_count)):
+				if i == 1:
 					uri = uribase
 				else:
 					uri = uribase + str(i)
@@ -339,7 +354,6 @@ if 'Graphs' not in os.listdir('.'):
 		os.mkdir('Graphs')
 
 weightings = get_weighting_data(weighting_source)
-print weightings
 lobbyclients = get_lobbyists_clients(lobbysource)
 graphs = get_graphs()
 commissioners = get_commissioners(root_page)
